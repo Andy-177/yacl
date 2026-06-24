@@ -91,6 +91,10 @@ class _Parser:
                     prefix = value_part[3:]
                     value = self._read_multiline_string(0, prefix=prefix, quote='"""')[0]
                     obj[key] = value
+                elif value_part.startswith('||'):
+                    obj[key] = self._read_block_scalar(indent, False, value_part[2:])
+                elif value_part.startswith('|'):
+                    obj[key] = self._read_block_scalar(indent, True, value_part[1:])
                 else:
                     obj[key] = self._parse_inline_value(value_part, indent + 2)
             else:
@@ -163,7 +167,12 @@ class _Parser:
                 key = rest[:colon_pos].strip()
                 val_part = rest[colon_pos+1:].lstrip()
                 if val_part:
-                    value = self._parse_inline_value(val_part, indent + 2)
+                    if val_part.startswith('||'):
+                        value = self._read_block_scalar(indent + 2, False, val_part[2:])
+                    elif val_part.startswith('|'):
+                        value = self._read_block_scalar(indent + 2, True, val_part[1:])
+                    else:
+                        value = self._parse_inline_value(val_part, indent + 2)
                     d = {key: value}
                     items.append(d)
                     key_indent = indent + 2
@@ -182,7 +191,12 @@ class _Parser:
                         sub_val_part = stripped[colon_pos+1:].lstrip()
                         self.index += 1
                         if sub_val_part:
-                            d[sub_key] = self._parse_inline_value(sub_val_part, line_indent + 2)
+                            if sub_val_part.startswith('||'):
+                                d[sub_key] = self._read_block_scalar(line_indent + 2, False, sub_val_part[2:])
+                            elif sub_val_part.startswith('|'):
+                                d[sub_key] = self._read_block_scalar(line_indent + 2, True, sub_val_part[1:])
+                            else:
+                                d[sub_key] = self._parse_inline_value(sub_val_part, line_indent + 2)
                         else:
                             self._skip_empty_lines()
                             if self.index < len(self.lines):
@@ -223,6 +237,65 @@ class _Parser:
             else:
                 items.append(self._parse_inline_value(rest, indent + 2))
         return items
+
+    def _read_block_scalar(self, key_indent: int, keep_comments: bool, rest: str) -> str:
+        if rest == '':
+            return self._read_block_scalar_indent(key_indent, keep_comments)
+        try:
+            count = int(rest)
+        except ValueError:
+            raise YACLParseError(f"Invalid block scalar syntax after | or ||: {rest!r}")
+        return self._read_block_scalar_count(keep_comments, count)
+
+    def _read_block_scalar_indent(self, key_indent: int, keep_comments: bool) -> str:
+        lines = []
+        content_indent = None
+        while self.index < len(self.lines):
+            line = self.lines[self.index]
+            indent = self._get_indent(line)
+            stripped = line.strip()
+            if stripped == '':
+                lines.append('')
+                self.index += 1
+                continue
+            if indent <= key_indent:
+                break
+            if not keep_comments and '#' in line:
+                self.index += 1
+                continue
+            if content_indent is None or indent < content_indent:
+                content_indent = indent
+            lines.append(line)
+            self.index += 1
+        if not lines:
+            return ''
+        if content_indent is not None:
+            result = []
+            for line in lines:
+                if line == '':
+                    result.append('')
+                else:
+                    result.append(line[content_indent:])
+            return '\n'.join(result)
+        return '\n'.join(lines)
+
+    def _read_block_scalar_count(self, keep_comments: bool, line_count: int) -> str:
+        lines = []
+        count = 0
+        while self.index < len(self.lines) and count < line_count:
+            line = self.lines[self.index]
+            stripped = line.strip()
+            if stripped == '':
+                lines.append(line)
+                self.index += 1
+                continue
+            if not keep_comments and '#' in line:
+                self.index += 1
+                continue
+            lines.append(line)
+            count += 1
+            self.index += 1
+        return '\n'.join(lines)
 
     def _read_multiline_string(self, indent_level: int = 0, prefix: str = None, quote: str = None) -> tuple:
         if prefix is not None:

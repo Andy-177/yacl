@@ -1301,6 +1301,267 @@ def test_key_with_colon_in_double_value():
 
 
 # =========================================================================
+# Section 11: Block Scalars (| and ||)
+# =========================================================================
+
+def test_block_scalar_pipe_indent_basic():
+    """| indent-dependent: retains all lines including #."""
+    c = textwrap.dedent("""\
+        text: |
+          1行目
+          2行目
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("| indent basic", r['text'], "1行目\n2行目")
+    test("| indent next key", r['next'], 'val')
+
+
+def test_block_scalar_pipe_indent_keeps_hash():
+    """| indent-dependent: lines with # are preserved."""
+    c = textwrap.dedent("""\
+        text: |
+          1行目
+          # this is kept
+          3行目
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("| indent keeps #", r['text'], "1行目\n# this is kept\n3行目")
+
+
+def test_block_scalar_pipe_indent_common_indent_stripped():
+    """| indent-dependent: common leading indent is stripped."""
+    c = textwrap.dedent("""\
+        text: |
+            line1
+            line2
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("| indent common indent", r['text'], "line1\nline2")
+
+
+def test_block_scalar_pipe_indent_extra_indent_preserved():
+    """| indent-dependent: extra indent beyond common is preserved."""
+    c = textwrap.dedent("""\
+        text: |
+            line1
+                indented
+            line3
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("| indent extra indent", r['text'], "line1\n    indented\nline3")
+
+
+def test_block_scalar_pipe_indent_empty_lines():
+    """| indent-dependent: empty lines are preserved."""
+    c = textwrap.dedent("""\
+        text: |
+            line1
+
+            line3
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("| indent empty lines", r['text'], "line1\n\nline3")
+
+
+def test_block_scalar_pipe_indent_nested():
+    """| indent-dependent inside a nested object."""
+    c = textwrap.dedent("""\
+        level1:
+            text: |
+                line1
+                line2
+            sibling: 'val
+    """)
+    r = yacl.loads(c)
+    test("| indent nested", r['level1']['text'], "line1\nline2")
+    test("| indent nested sibling", r['level1']['sibling'], 'val')
+
+
+def test_block_scalar_double_pipe_indent_removes_hash():
+    """|| indent-dependent: lines with # are removed."""
+    c = textwrap.dedent("""\
+        text: ||
+          line1
+          # this comment is removed
+          line3
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("|| indent removes #", r['text'], "line1\nline3")
+
+
+def test_block_scalar_double_pipe_indent_common_indent():
+    """|| indent-dependent: common indent still stripped after removing # lines."""
+    c = textwrap.dedent("""\
+        text: ||
+            keep1
+            # comment
+            keep2
+        next: 'val
+    """)
+    r = yacl.loads(c)
+    test("|| indent common indent", r['text'], "keep1\nkeep2")
+
+
+def test_block_scalar_pipe_linecount_basic():
+    """|N line-count: reads exactly N non-empty lines."""
+    c = textwrap.dedent("""\
+        text: |3
+        aaa
+        bbb
+        ccc
+        extra: 'not_included
+    """)
+    r = yacl.loads(c)
+    test("|3 basic", r['text'], "aaa\nbbb\nccc")
+    test("|3 extra key", r['extra'], 'not_included')
+
+
+def test_block_scalar_pipe_linecount_with_hash():
+    """|N line-count: # lines are counted toward N and preserved."""
+    c = textwrap.dedent("""\
+        text: |3
+        line1
+        # comment counted
+        line3
+    """)
+    r = yacl.loads(c)
+    test("|3 with #", r['text'], "line1\n# comment counted\nline3")
+
+
+def test_block_scalar_pipe_linecount_empty_lines():
+    """|N line-count: empty lines are preserved but not counted."""
+    c = textwrap.dedent("""\
+        text: |3
+        aaa
+
+        bbb
+        ccc
+    """)
+    r = yacl.loads(c)
+    test("|3 empty line preserved", r['text'], "aaa\n\nbbb\nccc")
+
+
+def test_block_scalar_pipe_linecount_less_than_N():
+    """|N line-count: fewer lines than N takes all."""
+    c = textwrap.dedent("""\
+        text: |5
+        only
+        two
+    """)
+    r = yacl.loads(c)
+    test("|5 fewer lines", r['text'], "only\ntwo")
+
+
+def test_block_scalar_double_pipe_linecount_basic():
+    """||N line-count: only non-# lines counted."""
+    c = textwrap.dedent("""\
+        text: ||2
+        keep1
+        # skip this
+        keep2
+        # also skip
+    """)
+    r = yacl.loads(c)
+    test("||2 basic", r['text'], "keep1\nkeep2")
+
+
+def test_block_scalar_double_pipe_linecount_empty_lines():
+    """||N line-count: empty lines preserved, not counted, # lines skipped."""
+    c = textwrap.dedent("""\
+        text: ||2
+        aaa
+
+        # comment
+        bbb
+    """)
+    r = yacl.loads(c)
+    test("||2 with empty", r['text'], "aaa\n\nbbb")
+
+
+def test_block_scalar_double_pipe_linecount_less_than_N():
+    """||N line-count: fewer non-# lines than N takes all non-# lines."""
+    c = textwrap.dedent("""\
+        text: ||10
+        only
+        # comment
+        two
+    """)
+    r = yacl.loads(c)
+    test("||10 fewer lines", r['text'], "only\ntwo")
+
+
+def test_block_scalar_pipe_in_list():
+    """| indent-dependent inside a list item."""
+    c = textwrap.dedent("""\
+        items:
+          - desc: |
+              line1
+              line2
+          - desc: |
+              other1
+              other2
+    """)
+    r = yacl.loads(c)
+    test("| in list item 0", r['items'][0]['desc'], "line1\nline2")
+    test("| in list item 1", r['items'][1]['desc'], "other1\nother2")
+
+
+def test_block_scalar_pipe_linecount_in_list():
+    """|N line-count inside a list item (no indent stripping)."""
+    c = textwrap.dedent("""\
+        items:
+          - desc: |2
+              indented
+              line2
+    """)
+    r = yacl.loads(c)
+    test("|2 in list", r['items'][0]['desc'], "      indented\n      line2")
+
+
+def test_block_scalar_pipe_linecount_spaces_preserved():
+    """|N line-count: leading spaces in content are preserved."""
+    c = textwrap.dedent("""\
+        text: |3
+        no indent
+          two spaces
+        no indent
+    """)
+    r = yacl.loads(c)
+    test("|3 spaces preserved", r['text'], "no indent\n  two spaces\nno indent")
+
+
+def test_block_scalar_double_pipe_indent_in_list():
+    """|| indent-dependent inside a list item."""
+    c = textwrap.dedent("""\
+        items:
+          - code: ||
+              def foo():
+                  # comment
+                  pass
+    """)
+    r = yacl.loads(c)
+    test("|| in list", r['items'][0]['code'], "def foo():\n    pass")
+
+
+def test_block_scalar_double_pipe_linecount_in_list():
+    """||N line-count inside a list item (no indent stripping)."""
+    c = textwrap.dedent("""\
+        items:
+          - code: ||2
+              def foo():
+                  pass
+    """)
+    r = yacl.loads(c)
+    test("||2 in list", r['items'][0]['code'], "      def foo():\n          pass")
+
+
+# =========================================================================
 # Run
 # =========================================================================
 
@@ -1457,6 +1718,26 @@ if __name__ == "__main__":
         ("single inside triple double", test_single_quote_inside_triple_double),
         ("colon in value single", test_key_with_colon_in_value),
         ("colon in value double", test_key_with_colon_in_double_value),
+        ("| indent basic", test_block_scalar_pipe_indent_basic),
+        ("| indent keeps #", test_block_scalar_pipe_indent_keeps_hash),
+        ("| indent common indent", test_block_scalar_pipe_indent_common_indent_stripped),
+        ("| indent extra indent", test_block_scalar_pipe_indent_extra_indent_preserved),
+        ("| indent empty lines", test_block_scalar_pipe_indent_empty_lines),
+        ("| indent nested", test_block_scalar_pipe_indent_nested),
+        ("|| indent removes #", test_block_scalar_double_pipe_indent_removes_hash),
+        ("|| indent common indent", test_block_scalar_double_pipe_indent_common_indent),
+        ("|3 basic", test_block_scalar_pipe_linecount_basic),
+        ("|3 with #", test_block_scalar_pipe_linecount_with_hash),
+        ("|3 empty lines", test_block_scalar_pipe_linecount_empty_lines),
+        ("|5 fewer lines", test_block_scalar_pipe_linecount_less_than_N),
+        ("||2 basic", test_block_scalar_double_pipe_linecount_basic),
+        ("||2 with empty", test_block_scalar_double_pipe_linecount_empty_lines),
+        ("||10 fewer lines", test_block_scalar_double_pipe_linecount_less_than_N),
+        ("| in list", test_block_scalar_pipe_in_list),
+        ("|2 in list", test_block_scalar_pipe_linecount_in_list),
+        ("|3 spaces preserved", test_block_scalar_pipe_linecount_spaces_preserved),
+        ("|| in list", test_block_scalar_double_pipe_indent_in_list),
+        ("||2 in list", test_block_scalar_double_pipe_linecount_in_list),
     ]
 
     print("=" * 60)

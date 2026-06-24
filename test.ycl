@@ -1,0 +1,15 @@
+日志配置: |
+    # 日志级别
+    level: INFO
+    # 输出格式
+    format: json
+    # 保留这些配置行
+    
+# 使用 || 移除注释的块标量
+
+代码片段: ||3
+def hello():
+    # 打印问候
+    print("Hello")
+    # 返回结果
+    return True
