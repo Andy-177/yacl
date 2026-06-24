@@ -50,9 +50,6 @@ class _Parser:
             if self.index >= len(self.lines):
                 break
             line = self.lines[self.index]
-            indent = self._get_indent(line)
-            if indent < indent_level:
-                break
             stripped = line.lstrip()
             if stripped.startswith('###'):
                 self.index += 1
@@ -71,6 +68,9 @@ class _Parser:
             if colon_pos == -1:
                 self.index += 1
                 continue
+            indent = self._get_indent(line)
+            if indent < indent_level:
+                break
             key = stripped[:colon_pos].strip()
             if not key:
                 self.index += 1
@@ -107,12 +107,12 @@ class _Parser:
                 if next_indent > indent:
                     next_stripped = next_line.lstrip()
                     if next_stripped.startswith('-'):
-                        obj[key] = self._parse_list(indent + 2)
+                        obj[key] = self._parse_list(next_indent)
                     elif next_stripped.startswith("'''") or next_stripped.startswith('"""'):
                         value = self._read_multiline_string(indent + 2)[0]
                         obj[key] = value
                     else:
-                        obj[key] = self._parse_block(indent + 2)
+                        obj[key] = self._parse_block(next_indent)
                 else:
                     obj[key] = None
         return obj
@@ -124,9 +124,6 @@ class _Parser:
             if self.index >= len(self.lines):
                 break
             line = self.lines[self.index]
-            indent = self._get_indent(line)
-            if indent < indent_level:
-                break
             stripped = line.lstrip()
             if stripped.startswith('###'):
                 self.index += 1
@@ -139,6 +136,9 @@ class _Parser:
             if stripped.startswith('#'):
                 self.index += 1
                 continue
+            indent = self._get_indent(line)
+            if indent < indent_level:
+                break
             if not stripped.startswith('-'):
                 break
             rest = stripped[1:].lstrip()
@@ -153,12 +153,12 @@ class _Parser:
                 if next_indent > indent_level:
                     next_stripped = next_line.lstrip()
                     if next_stripped.startswith('-'):
-                        items.append(self._parse_list(indent_level + 2))
+                        items.append(self._parse_list(next_indent))
                     elif next_stripped.startswith("'''") or next_stripped.startswith('"""'):
                         value = self._read_multiline_string(indent_level)[0]
                         items.append(value)
                     else:
-                        items.append(self._parse_block(indent_level + 2))
+                        items.append(self._parse_block(next_indent))
                 else:
                     items.append(None)
                 continue
@@ -205,11 +205,11 @@ class _Parser:
                                 if next_indent2 > line_indent:
                                     next_stripped2 = next_line.lstrip()
                                     if next_stripped2.startswith('-'):
-                                        d[sub_key] = self._parse_list(line_indent + 2)
+                                        d[sub_key] = self._parse_list(next_indent2)
                                     elif next_stripped2.startswith("'''") or next_stripped2.startswith('"""'):
                                         d[sub_key] = self._read_multiline_string(line_indent + 2)[0]
                                     else:
-                                        d[sub_key] = self._parse_block(line_indent + 2)
+                                        d[sub_key] = self._parse_block(next_indent2)
                                 else:
                                     d[sub_key] = None
                             else:
@@ -224,11 +224,11 @@ class _Parser:
                     if next_indent > indent + 2:
                         next_stripped = next_line.lstrip()
                         if next_stripped.startswith('-'):
-                            value = self._parse_list(indent + 2)
+                            value = self._parse_list(next_indent)
                         elif next_stripped.startswith("'''") or next_stripped.startswith('"""'):
                             value = self._read_multiline_string(indent + 2)[0]
                         else:
-                            value = self._parse_block(indent + 2)
+                            value = self._parse_block(next_indent)
                         items.append({key: value})
                     else:
                         items.append({key: None})
@@ -261,7 +261,13 @@ class _Parser:
             if indent <= key_indent:
                 break
             if not keep_comments and '#' in line:
+                comment_pos = line.index('#')
+                before = line[:comment_pos].rstrip()
                 self.index += 1
+                if before:
+                    if content_indent is None or indent < content_indent:
+                        content_indent = indent
+                    lines.append(before)
                 continue
             if content_indent is None or indent < content_indent:
                 content_indent = indent
@@ -290,7 +296,12 @@ class _Parser:
                 self.index += 1
                 continue
             if not keep_comments and '#' in line:
+                comment_pos = line.index('#')
+                before = line[:comment_pos].rstrip()
                 self.index += 1
+                if before:
+                    lines.append(before)
+                    count += 1
                 continue
             lines.append(line)
             count += 1
